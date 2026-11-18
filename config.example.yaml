@@ -1,0 +1,117 @@
+# ClipFarm — configuração. Copie para config.yaml e ajuste.
+
+market:
+  languages: ["pt"]            # idiomas das lives (campo 'language' da Twitch). Ex.: ["pt", "en"]
+  whisper_language: "pt"       # idioma da transcrição/legenda
+
+sources:
+  twitch:
+    enabled: true
+    # Antes do lançamento (19/11), teste com "Grand Theft Auto V".
+    games: ["Grand Theft Auto VI"]
+    top_streams: 20            # quantas lives acompanhar no modo watch
+    min_viewers: 300
+    clips_lookback_hours: 12   # janela do harvest de clips da Twitch
+    clips_min_views: 150
+    clips_max_per_run: 60
+
+# Canais com permissão de clipagem (programa de clipping, acordo ou política pública do streamer).
+# Vazio = qualquer canal (não recomendado: risco de DMCA/strike).
+allowlist:
+  - login: "exemplo_streamer"
+    credit: "twitch.tv/exemplo_streamer"
+    # Região da facecam em fração do frame (0–1). Opcional; ativa o layout 'facecam'.
+    facecam: {x: 0.0, y: 0.0, w: 0.24, h: 0.30}
+blocklist: []
+
+detection:
+  window_s: 10                 # tamanho da janela de contagem do chat
+  baseline_windows: 30         # janelas usadas como linha de base (~5 min)
+  z_threshold: 3.0             # quão acima do normal o chat precisa ficar
+  min_msgs: 12                 # mínimo de msgs na janela para valer
+  min_emotion: 0.25            # fração mínima de msgs com risada OU hype (0 = aceita qualquer pico)
+  cooldown_s: 90               # evita vários momentos do mesmo evento
+  chat_delay_s: 8              # o chat reage alguns segundos depois do evento
+  laugh_terms: ["kekw", "lul", "lmao", "omegalul", "icant", "xd", "hahaha", "kkk", "rsrs", "😂", "🤣"]
+  hype_terms: ["pog", "poggers", "pogchamp", "w", "goat", "insano", "caralho", "noooo", "wtf", "omg", "😱", "🔥", "monkas"]
+
+clip:
+  pre_s: 22                    # segundos antes do pico
+  post_s: 8                    # segundos depois do pico
+  min_len_s: 12
+  max_len_s: 58                # < 60s: Shorts e TikTok sem fricção
+  download_pad_s: 45           # janela baixada do VOD em volta do momento
+  process_delay_s: 180         # espera o VOD "alcançar" o momento antes de baixar
+
+render:
+  layout: "auto"               # auto | facecam | pip | blur | crop
+  pip_zoom: 1.5                # layout pip: ampliação da câmera (1.0 = tamanho original da live)
+  style: null                  # preset de legenda (flagra, destaque, verde, minimal, meme); null = cores abaixo
+  handle: null                 # @ da página em todo corte, ex.: "@meucanal"
+  width: 1080
+  height: 1920
+  fps: 30
+  font: "Poppins"
+  font_size: 100
+  words_per_caption: 3
+  caption_color: "&H00FFFFFF"   # ASS: &HAABBGGRR
+  highlight_color: "&H0000E5FF" # amarelo
+  crf: 20
+  preset: "veryfast"
+  loudnorm: true
+
+whisper:
+  enabled: true
+  model: "small"               # tiny | base | small | medium | large-v3
+  device: "auto"               # auto | cpu | cuda
+  compute_type: "int8"
+  # vocabulário que o Whisper tende a errar (nomes, gírias de live)
+  prompt: "Live de GTA 6 na Twitch. O streamer fala com o chat. Lucia, Jason, Vice City, Leonida, sub, mano, kkkk."
+  fixes: {chate: chat, chati: chat, xat: chat}   # correções certeiras, palavra a palavra
+
+llm:
+  enabled: false               # true = Claude dá nota, corta e escreve título
+  model: "claude-haiku-5-5"    # troque pelo modelo que preferir
+  min_score: 6                 # abaixo disso o clip é descartado
+
+review:
+  auto_approve_score: null     # ex.: 8.5 aprova sozinho clips com nota alta; null = sempre revisão humana
+
+publish:
+  hashtags: ["#gta6", "#gtavi", "#gta", "#clips"]   # usado pelo Studio
+  hashtag_pools:               # modo automático: sorteia `pick` de cada grupo por corte, para variar
+    - {pick: 2, tags: ["#gta6", "#gtavi", "#gta", "#grandtheftauto6", "#gta6gameplay", "#vicecity"]}
+    - {pick: 1, tags: ["#cortes", "#clips", "#cortesdelive", "#melhoresmomentos"]}
+    - {pick: 2, tags: ["#fyp", "#viral", "#foryou", "#fy", "#paravoce"]}
+  youtube:
+    enabled: true
+    privacy: "private"         # 'public' só funciona depois da auditoria do projeto no Google
+    daily_cap: 6
+    category_id: "20"          # Gaming
+    tags: ["GTA 6", "GTA VI", "Grand Theft Auto VI", "Shorts"]
+  tiktok:
+    enabled: true
+    mode: "inbox"              # inbox = vai para rascunhos do app; direct = post direto (público exige auditoria)
+    privacy: "SELF_ONLY"       # direct sem auditoria: só SELF_ONLY
+    daily_cap: 8
+  instagram:
+    enabled: true
+    share_to_feed: true        # Reel aparece também no feed
+    daily_cap: 10
+
+studio:                        # conector do Claude (python -m clipfarm.studio mcp)
+  export_dir: "~/ClipFarm/cortes"   # onde os cortes prontos ficam (mp4)
+  timezone: "America/Sao_Paulo"     # fuso dos agendamentos
+  painel_port: 8765                 # painel local: http://127.0.0.1:8765
+  allowed_hosts: ["youtube.com", "youtu.be", "twitch.tv", "kick.com"]
+  max_duration_min: 240        # vídeo mais longo aceito para análise
+  max_clip_s: 90
+  candidates: 25               # candidatos entregues ao Claude por vídeo
+  analysis_model: "base"       # Whisper rápido p/ vídeo longo (quando não há legenda do YouTube)
+  caption_model: "small"       # Whisper melhor só no trecho do corte (legenda final)
+  upload_max_mb: 4096
+  plans: {pessoal: 500}        # trava de segurança: cortes por dia
+  public_url: "http://localhost:8000"   # só para o modo `serve` (MCP via túnel)
+
+paths:
+  data_dir: "data"

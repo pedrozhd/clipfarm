@@ -1,0 +1,20 @@
+requests>=2.31
+PyYAML>=6.0
+numpy>=1.26
+yt-dlp>=2025.1.1
+python-dotenv>=1.0
+# transcrição/legenda
+faster-whisper>=1.0
+av<19              # av 19 removeu metadata_errors, que o faster-whisper 1.2 ainda usa
+# publicação YouTube
+google-api-python-client>=2.100
+google-auth-oauthlib>=1.2
+# opcional: nota e título com Claude
+anthropic>=0.40
+# Studio: conector MCP + painel
+mcp>=2.3,<3
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9
+httpx>=0.27
+tzdata>=2024.1      # fusos no Windows
