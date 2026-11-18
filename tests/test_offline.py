@@ -146,6 +146,15 @@ def test_clip_keeps_only_stretch_with_facecam():
     assert r(ts, [a, a, far, a, a, a], 0, 18) == (0, 18, a)       # uma leitura errada isolada não quebra o trecho
 
 
+def test_swear_words_get_a_hash_in_the_middle():
+    from clipfarm.render import censor as c
+
+    assert c("puta merda, que porra é essa") == "pu#a me#da, que po#ra é essa"
+    assert c("CARALHO mano") == "CAR#LHO mano" and c("vai tomar no cu") == "vai tomar no c#"
+    assert c("o computador da disputa") == "o computador da disputa"  # não pega pedaço de palavra
+    assert c("cuidado com o curso") == "cuidado com o curso"
+
+
 def test_end_extends_to_speech_pause():
     from clipfarm.scoring import end_at_pause
 

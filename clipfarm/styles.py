@@ -6,6 +6,11 @@ STYLES: dict[str, dict] = {
     "flagra": {"font": "Poppins", "font_size": 124, "upper": True, "words_per_caption": 3,
                "caption_color": "&H00FFFFFF", "highlight_color": "&H00FFE319", "outline": 7, "shadow": 3,
                "pop": True, "y_offset": 0, "hook_color": "&H00872DFF", "hook_font": "Anton", "hook_scale": 0.95},
+    # legenda limpa: frase inteira em minúsculas, fonte condensada, contorno fino, sem cor (mesma manchete da marca)
+    "clean": {"font": "Sarabun SemiBold", "font_size": 74, "upper": False, "lower": True,
+              "words_per_caption": 7, "caption_color": "&H00FFFFFF", "highlight_color": None, "outline": 4,
+              "shadow": 2, "pop": False, "y_offset": 0, "cap_on_cam": True, "hook_color": "&H00872DFF", "hook_font": "Anton",
+              "hook_scale": 0.95},
     # palavra ativa em amarelo, 3 palavras, caixa alta (estilo "Hormozi")
     "destaque": {"font": "Poppins", "font_size": 100, "upper": True, "words_per_caption": 3,
                  "caption_color": "&H00FFFFFF", "highlight_color": "&H0000E5FF", "outline": 7, "shadow": 3,

@@ -15,7 +15,7 @@ from pathlib import Path
 from . import config as C
 from .db import DB
 from .download import fetch_url, fetch_vod_section
-from .render import probe, render
+from .render import censor, probe, render
 from .scoring import choose_window, end_at_pause, heuristic_title
 from .signals import audio
 from .signals.chat import SpikeDetector, TwitchChat
@@ -263,7 +263,7 @@ def process_moment(ctx: Ctx, m, transcriber=None) -> int | None:
 
     # 6) render 9:16 com legenda + crédito
     credit = rules.get("credit") or f"twitch.tv/{m['channel']}"
-    title = title or heuristic_title(m["channel"], kind, m["title_hint"])
+    title = censor(title or heuristic_title(m["channel"], kind, m["title_hint"]))
     out = ctx.data / "clips" / f"{m['channel']}_{m['id']}.mp4"
     render(str(raw), str(out), start, end, words, cfg["render"], cfg["render"]["layout"],
            facecam or None, credit, hook=headline, handle=cfg["render"].get("handle"), style=cfg["render"].get("style"))

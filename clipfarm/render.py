@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -32,8 +33,18 @@ def _bgr(ass_color: str) -> str:
     return f"&H{ass_color.replace('&H', '').replace('&', '')[-6:]}&"
 
 
+# palavrões: a palavra sai com um # no meio (pu#a, me#da), na legenda, na manchete e no texto do post
+_SWEAR = re.compile(
+    r"\b(porra\w*|caralh\w*|merd\w*|put[ao]s?|fod\w*|cu|cuz[ãa]o\w*|cuz[õo]es|bucet\w*|viad\w*|bost\w*|cacet\w*|"
+    r"arrombad\w*|desgraçad\w*|vagabund\w*|piranh\w*|krl|pqp|fdp|shit\w*|fuck\w*|bitch\w*)\b", re.I)
+
+
+def censor(text: str) -> str:
+    return _SWEAR.sub(lambda m: m[0][:len(m[0]) // 2] + "#" + m[0][len(m[0]) // 2 + 1:], text)
+
+
 def _clean(w: str, upper: bool = True) -> str:
-    w = w.replace("\\", "").replace("{", "").replace("}", "").replace("\n", " ")
+    w = censor(w.replace("\\", "").replace("{", "").replace("}", "").replace("\n", " "))
     return w.upper() if upper else w
 
 
@@ -99,14 +110,23 @@ def build_ass(words: list[Word], start: float, end: float, rc: dict, layout: str
     elif hook:
         lines.append(f"Dialogue: 2,{_ts(0)},{_ts(dur)},Hook,,0,0,0,,"
                      f"{{\\an5\\q0\\pos({W // 2},{pos['hook_y']})}}{_clean(hook, False)}")
+    on_cam = bool(st.get("cap_on_cam")) and layout == "facecam"
+    if on_cam:
+        # legenda na base da câmera (como nos cortes do próprio streamer); crédito e @ descem para o topo do jogo
+        game_top = H // 3 + (BAND_H if hook else 0)
+        cy = H // 3 - 62
     if credit:
         x, y, an = pos["credit"]
+        y = game_top + 52 if on_cam else y
         lines.append(f"Dialogue: 1,{_ts(0)},{_ts(dur)},Credit,,0,0,0,,{{\\an{an}\\pos({x},{y})}}{_clean(credit, False)}")
     if handle:
         x, y, an = pos["handle"]
+        y = game_top + 52 if on_cam else y
         lines.append(f"Dialogue: 1,{_ts(0)},{_ts(dur)},Handle,,0,0,0,,{{\\an{an}\\pos({x},{y})}}{_clean(handle, False)}")
 
     rel = [Word(w.start - start, w.end - start, w.text) for w in words if w.end > start and w.start < end]
+    if st.get("lower"):  # estilo limpo: tudo minúsculo e sem pontuação
+        rel = [Word(w.start, w.end, t) for w in rel if (t := w.text.lower().strip(".,!?;:…\"'"))]
     max_chars = 18 if st["words_per_caption"] <= 4 else 34
     chunks = chunk_words(rel, st["words_per_caption"], max_chars=max_chars)
     for ci, ch in enumerate(chunks):
