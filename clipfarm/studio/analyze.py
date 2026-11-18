@@ -42,7 +42,8 @@ def check_url(url: str, allowed: tuple[str, ...] = ALLOWED_HOSTS) -> str:
 
 
 def _ytdlp(args: list[str], timeout: int = 3600) -> subprocess.CompletedProcess:
-    r = subprocess.run([sys.executable, "-m", "yt_dlp", "--no-warnings", "--no-playlist", *args], capture_output=True, text=True,
+    r = subprocess.run([sys.executable, "-m", "yt_dlp", "--no-warnings", "--no-playlist",
+                        "--use-extractors", "youtube.*,twitch.*,kick.*", *args], capture_output=True, text=True,
                        timeout=timeout)
     if r.returncode != 0:
         raise RuntimeError(f"yt-dlp: {r.stderr.strip()[-400:]}")
