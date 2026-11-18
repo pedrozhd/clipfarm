@@ -82,9 +82,9 @@ publish:
   export_dir: null   # copia cada corte para <pasta>/<plataforma>/<canal>/ (null = desliga)
   hashtags: ["#gta6", "#gtavi", "#gta", "#clips"]   # usado pelo Studio
   hashtag_pools:               # modo automático: sorteia `pick` de cada grupo por corte, para variar
-    - {pick: 2, tags: ["#gta6", "#gtavi", "#gta", "#grandtheftauto6", "#gta6gameplay", "#vicecity"]}
+    - {pick: 1, tags: ["#gta6", "#gtavi", "#gta", "#grandtheftauto6", "#gta6gameplay", "#vicecity"]}
     - {pick: 1, tags: ["#cortes", "#clips", "#cortesdelive", "#melhoresmomentos"]}
-    - {pick: 2, tags: ["#fyp", "#viral", "#foryou", "#fy", "#paravoce"]}
+    - {pick: 1, tags: ["#fyp", "#viral", "#foryou", "#fy", "#paravoce"]}
   youtube:
     enabled: true
     privacy: "private"         # 'public' só funciona depois da auditoria do projeto no Google

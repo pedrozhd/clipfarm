@@ -268,8 +268,8 @@ def process_moment(ctx: Ctx, m, transcriber=None) -> int | None:
     render(str(raw), str(out), start, end, words, cfg["render"], cfg["render"]["layout"],
            facecam or None, credit, hook=headline, handle=cfg["render"].get("handle"), style=cfg["render"].get("style"))
 
-    tags = " ".join(dict.fromkeys(pick_hashtags(cfg["publish"]) + [f"#{m['channel']}"] + extra_tags))
-    desc = f"{title}\n\nCréditos: {credit}\n{tags} #shorts"
+    tags = " ".join(pick_hashtags(cfg["publish"]))  # quantas e quais: publish.hashtag_pools (3 por legenda)
+    desc = f"{title}\n\nCréditos: {credit}\n{tags}"
     out.with_suffix(".txt").write_text(desc, encoding="utf-8")  # legenda pronta para colar ao postar à mão
     export_copies(cfg["publish"], out, m["channel"])
     auto = cfg["review"].get("auto_approve_score")

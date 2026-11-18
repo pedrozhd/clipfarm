@@ -11,6 +11,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 
+from .render import thumbnail
+
 PLATFORMS = ("tiktok", "instagram", "youtube")
 
 
@@ -22,6 +24,8 @@ class Mark(BaseModel):
 def create_app(ctx) -> FastAPI:
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     lock = threading.Lock()  # uma conexão SQLite para as threads do servidor
+    thumbs = Path(ctx.cfg["paths"]["data_dir"]) / "tmp" / "thumbs"
+    thumbs.mkdir(parents=True, exist_ok=True)
 
     @app.get("/", response_class=HTMLResponse)
     def index():
@@ -43,6 +47,19 @@ def create_app(ctx) -> FastAPI:
         if not row or not Path(row["path"]).exists():
             raise HTTPException(404)
         return FileResponse(row["path"], media_type="video/mp4", filename=Path(row["path"]).name)
+
+    @app.get("/t/{cid}.jpg")
+    def thumb(cid: int):
+        """Miniatura do corte. A grade usa imagens: dezenas de <video> esgotam as 6 conexões do navegador e a página trava."""
+        with lock:
+            row = ctx.db.conn.execute("SELECT path FROM clips WHERE id=?", (cid,)).fetchone()
+        if not row or not Path(row["path"]).exists():
+            raise HTTPException(404)
+        src = Path(row["path"])
+        out = thumbs / f"{cid}_{int(src.stat().st_mtime)}.jpg"  # refeito o corte, muda a miniatura
+        if not out.exists():
+            thumbnail(str(src), str(out), at=1.0)
+        return FileResponse(out, media_type="image/jpeg", headers={"Cache-Control": "max-age=86400"})
 
     @app.post("/api/clips/{cid}/posted")
     def mark(cid: int, m: Mark):
@@ -82,7 +99,7 @@ main{padding:24px;display:grid;grid-template-columns:repeat(auto-fill,minmax(250
 .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
 .card.done{opacity:.55}
 .thumb{position:relative;aspect-ratio:9/16;background:#000;cursor:pointer;border:0;padding:0;border-radius:0;display:block;width:100%}
-.thumb video{width:100%;height:100%;object-fit:cover;display:block}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
 .thumb span{position:absolute;right:8px;bottom:8px;background:rgba(13,11,26,.8);padding:2px 8px;border-radius:999px;font-size:12px;font-variant-numeric:tabular-nums}
 .thumb em{position:absolute;left:8px;top:8px;background:var(--mag);color:#fff;font-style:normal;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;text-transform:uppercase;letter-spacing:.06em}
 .body{padding:12px 14px 14px;display:grid;gap:10px}
@@ -121,7 +138,7 @@ dialog::backdrop{background:rgba(5,4,12,.86)}
 </header>
 <main id="grid"></main>
 <dialog id="dlg"><div class="sim">
-  <div class="phone"><video id="pv" controls loop playsinline></video>
+  <div class="phone"><video id="pv" controls loop playsinline preload="metadata"></video>
     <div class="ui" id="ui"><div class="top" id="uitop"></div>
       <div class="rail"><div>curtir</div><div>comentar</div><div>salvar</div><div>enviar</div></div>
       <div class="cap"><b id="uih"></b><span id="uic"></span></div><div class="nav"></div></div>
@@ -152,7 +169,7 @@ function draw() {
   for (const c of show) {
     const card = el("article", "card" + (done(c) ? " done" : ""));
     const th = el("button", "thumb"); th.setAttribute("aria-label", "Ver prévia: " + c.title);
-    if (c.exists) { const v = el("video"); v.src = "/v/" + c.id + ".mp4#t=1"; v.preload = "metadata"; v.muted = true; th.append(v); }
+    if (c.exists) { const v = el("img"); v.src = "/t/" + c.id + ".jpg"; v.loading = "lazy"; v.alt = ""; th.append(v); }
     th.append(el("span", "", c.seconds + "s"));
     if (c.posted.length) th.append(el("em", "", c.posted.length + "/3 postado"));
     th.onclick = () => c.exists && openSim(c);
@@ -185,7 +202,7 @@ function openSim(c) {
 }
 $("simtabs").onclick = (e) => e.target.dataset.p !== undefined && setSim(e.target.dataset.p);
 $("close").onclick = () => $("dlg").close();
-$("dlg").addEventListener("close", () => $("pv").pause());
+$("dlg").addEventListener("close", () => { $("pv").pause(); $("pv").removeAttribute("src"); $("pv").load(); });  // solta a conexão do vídeo
 $("tabs").onclick = (e) => { if (!e.target.dataset.f) return; filter = e.target.dataset.f; for (const b of $("tabs").children) b.setAttribute("aria-pressed", b === e.target); draw(); };
 load(); setInterval(() => { if (!$("dlg").open) load(); }, 30000);
 </script></body></html>
