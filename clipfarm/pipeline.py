@@ -69,9 +69,9 @@ def harvest(ctx: Ctx) -> int:
     allowed, added = ctx.allowed_ids(), 0
     blocked = {b.lower() for b in (ctx.cfg.get("blocklist") or [])}
     for name, gid in ctx.twitch.game_ids(tc["games"]).items():
-        for c in ctx.twitch.top_clips(gid, tc["clips_lookback_hours"], tc["clips_max_per_run"] * 4):
+        for c in ctx.twitch.top_clips(gid, tc["clips_lookback_hours"], max(1000, tc["clips_max_per_run"] * 4)):
             if c["view_count"] < tc["clips_min_views"]:
-                break  # vem ordenado por views
+                continue  # a ordem por views da Twitch não é exata: parar aqui perdia clips bons mais adiante
             if langs and c.get("language") not in langs:
                 continue
             if allowed is not None and c["broadcaster_id"] not in allowed:
@@ -89,7 +89,8 @@ def harvest(ctx: Ctx) -> int:
                 score=round(3 * math.log10(c["view_count"] + 1), 2),
                 signals={"kind": "viewer_clip", "views": c["view_count"], "clip_title": c["title"],
                          "game": name, "created_at": c["created_at"]},
-                title_hint=c["title"], external_id=f"twitch_clip:{c['id']}")
+                title_hint=c["title"], external_id=f"twitch_clip:{c['id']}",
+                status="new" if c.get("video_id") else "no_vod")  # sem VOD só há o clip com legenda embutida
             added += mid is not None
             if added >= tc["clips_max_per_run"]:
                 return added

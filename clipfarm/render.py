@@ -53,7 +53,7 @@ def chunk_words(words: list[Word], per: int, max_chars: int = 18, gap: float = 0
 # posições em 1080x1920: legenda, crédito (x, y, alinhamento), @ da página, área do gancho (centro y)
 LAYOUT_POS = {  # @ e crédito logo abaixo do vídeo: a base da tela fica coberta pela UI do TikTok/Reels
     "blur": {"cap": (540, 1440), "credit": (540, 1335, 5), "handle": (540, 1290, 5), "hook_y": 270},
-    "facecam": {"cap": (540, 820), "credit": (30, 625, 1), "handle": (1050, 625, 3), "hook_y": 1560},
+    "facecam": {"cap": (540, 820), "credit": (90, 625, 1), "handle": (990, 625, 3), "hook_y": 1560},
     "crop": {"cap": (540, 1300), "credit": (540, 290, 5), "handle": (540, 245, 5), "hook_y": 440},
     "pip": {"cap": (540, 1330), "credit": (540, 1225, 5), "handle": (540, 1180, 5), "hook_y": 760},
     "meme": {"cap": (540, 1420), "credit": (540, 1252, 5), "handle": (540, 1210, 5), "hook_y": 330},
@@ -93,7 +93,7 @@ def build_ass(words: list[Word], start: float, end: float, rc: dict, layout: str
         # manchete na faixa entre a câmera e o jogo (não cobre o gameplay); a legenda desce junto
         cy += BAND_H
         lines.insert(lines.index("[Events]") - 1, f"Style: Band,{st.get('hook_font', 'Poppins')},78,&H00FFFFFF,&H000000FF,"
-                     f"&H00000000,&H00000000,-1,0,0,0,100,100,1,0,1,0,0,5,60,60,0,1")
+                     f"&H00000000,&H00000000,-1,0,0,0,100,100,1,0,1,0,0,5,100,100,0,1")
         lines.append(f"Dialogue: 2,{_ts(0)},{_ts(dur)},Band,,0,0,0,,"
                      f"{{\\an5\\q0\\pos({W // 2},{H // 3 + BAND_H // 2 - 3})}}{_clean(hook, True)}")
     elif hook:
