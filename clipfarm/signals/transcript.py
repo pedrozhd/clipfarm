@@ -53,7 +53,7 @@ def transcribe(path: str, language: str = "pt", model: str = "small", device: st
             continue
         segments.append(Segment(s.start, s.end, s.text.strip()))
         for w in s.words or []:
-            text = w.word.strip()
+            text = w.word.strip().replace("...", "").replace("…", "")  # o Whisper marca hesitação com reticências
             core = text.strip(".,!?…\"'")
             if core.lower() in fixes:
                 text = text.replace(core, fixes[core.lower()])

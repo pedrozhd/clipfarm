@@ -33,6 +33,8 @@ def main(argv=None):
     sub.add_parser("auth-youtube", help="login OAuth no canal do YouTube")
     sub.add_parser("auth-tiktok", help="login OAuth na conta do TikTok")
     sub.add_parser("stats", help="resumo do funil")
+    pn = sub.add_parser("painel", help="painel local: ver os cortes, copiar legenda, marcar postados")
+    pn.add_argument("--port", type=int, default=8766)
 
     a = ap.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if a.verbose else logging.INFO,
@@ -83,6 +85,13 @@ def main(argv=None):
         code = parse_qs(urlparse(url).query).get("code", [url])[0]
         tiktok.exchange_code(key, secret, code, redirect, str(ctx.data / "tiktok_token.json"))
         print("TikTok autenticado.")
+    elif a.cmd == "painel":
+        import uvicorn
+
+        from .panel import create_app
+
+        print(f"painel: http://127.0.0.1:{a.port}")
+        uvicorn.run(create_app(ctx), host="127.0.0.1", port=a.port, log_level="warning")
     elif a.cmd == "stats":
         q = ctx.db.conn.execute
         print("momentos:", dict(q("SELECT status, COUNT(*) FROM moments GROUP BY status").fetchall()))

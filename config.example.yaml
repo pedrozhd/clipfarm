@@ -39,6 +39,7 @@ clip:
   pre_s: 22                    # segundos antes do pico
   post_s: 8                    # segundos depois do pico
   min_len_s: 12
+  require_facecam: true        # descarta o corte se a facecam não aparece por pelo menos min_len_s seguidos
   max_len_s: 58                # < 60s: Shorts e TikTok sem fricção
   download_pad_s: 45           # janela baixada do VOD em volta do momento
   process_delay_s: 180         # espera o VOD "alcançar" o momento antes de baixar
@@ -66,7 +67,7 @@ whisper:
   device: "auto"               # auto | cpu | cuda
   compute_type: "int8"
   # vocabulário que o Whisper tende a errar (nomes, gírias de live)
-  prompt: "Live de GTA 6 na Twitch. O streamer fala com o chat. Lucia, Jason, Vice City, Leonida, sub, mano, kkkk."
+  prompt: "Live de GTA 6 na Twitch. O streamer fala com o chat. Personagens: Lucia, Jason, Mandy, Shirley, Brian. Vice City, Leonida, sub, mano, kkkk."
   fixes: {chate: chat, chati: chat, xat: chat}   # correções certeiras, palavra a palavra
 
 llm:
@@ -78,6 +79,7 @@ review:
   auto_approve_score: null     # ex.: 8.5 aprova sozinho clips com nota alta; null = sempre revisão humana
 
 publish:
+  export_dir: null   # copia cada corte para <pasta>/<plataforma>/<canal>/ (null = desliga)
   hashtags: ["#gta6", "#gtavi", "#gta", "#clips"]   # usado pelo Studio
   hashtag_pools:               # modo automático: sorteia `pick` de cada grupo por corte, para variar
     - {pick: 2, tags: ["#gta6", "#gtavi", "#gta", "#grandtheftauto6", "#gta6gameplay", "#vicecity"]}

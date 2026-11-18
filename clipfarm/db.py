@@ -131,6 +131,17 @@ class DB:
             (platform,),
         ).fetchone()[0]
 
+    def remove_post(self, clip_id: int, platform: str):
+        self.conn.execute("DELETE FROM posts WHERE clip_id=? AND platform=?", (clip_id, platform))
+        self.conn.commit()
+
+    def posted_map(self) -> dict[int, list[str]]:
+        """clip_id -> plataformas em que já foi postado."""
+        out: dict[int, list[str]] = {}
+        for cid, plat in self.conn.execute("SELECT clip_id, platform FROM posts WHERE status='ok'"):
+            out.setdefault(cid, []).append(plat)
+        return out
+
     def add_post(self, clip_id: int, platform: str, remote_id: str | None, status: str, error: str | None = None):
         self.conn.execute(
             "INSERT INTO posts (clip_id, platform, remote_id, status, error, created_at) VALUES (?,?,?,?,?,?) "

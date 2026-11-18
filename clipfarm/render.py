@@ -89,7 +89,14 @@ def build_ass(words: list[Word], start: float, end: float, rc: dict, layout: str
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
     ]
     dur = end - start
-    if hook:
+    if hook and layout == "facecam":
+        # manchete na faixa entre a câmera e o jogo (não cobre o gameplay); a legenda desce junto
+        cy += BAND_H
+        lines.insert(lines.index("[Events]") - 1, f"Style: Band,{st.get('hook_font', 'Poppins')},78,&H00FFFFFF,&H000000FF,"
+                     f"&H00000000,&H00000000,-1,0,0,0,100,100,1,0,1,0,0,5,60,60,0,1")
+        lines.append(f"Dialogue: 2,{_ts(0)},{_ts(dur)},Band,,0,0,0,,"
+                     f"{{\\an5\\q0\\pos({W // 2},{H // 3 + BAND_H // 2 - 3})}}{_clean(hook, True)}")
+    elif hook:
         lines.append(f"Dialogue: 2,{_ts(0)},{_ts(dur)},Hook,,0,0,0,,"
                      f"{{\\an5\\q0\\pos({W // 2},{pos['hook_y']})}}{_clean(hook, False)}")
     if credit:
@@ -129,8 +136,11 @@ def _even(x: float) -> int:
     return max(2, int(x) // 2 * 2)
 
 
+BAND_H = 190  # altura da faixa da manchete no layout facecam (px em 1080x1920)
+
+
 def video_filter(layout: str, w: int, h: int, W: int, H: int, fps: int, facecam: dict | None,
-                 pip_zoom: float = 1.5) -> str:
+                 pip_zoom: float = 1.5, band: bool = False) -> str:
     if layout == "pip" and facecam:
         # jogo em tela cheia (recorte 9:16 central) + câmera pequena no canto de cima: pouco zoom = câmera nítida
         fx, fy = _even(w * facecam["x"]), _even(h * facecam["y"])
@@ -143,15 +153,20 @@ def video_filter(layout: str, w: int, h: int, W: int, H: int, fps: int, facecam:
                 f"[game][cam]overlay=40:180,setsar=1[base]")
     if layout == "facecam" and facecam:
         top_h = _even(H / 3)                      # 640 em 1080x1920
-        bot_h = H - top_h
+        bot_h = H - top_h - (BAND_H if band else 0)
         fx, fy = _even(w * facecam["x"]), _even(h * facecam["y"])
         fw, fh = _even(w * facecam["w"]), _even(h * facecam["h"])
         gw = min(w, _even(h * W / bot_h))
-        return (f"[0:v]fps={fps},split=2[a][b];"
-                f"[a]crop={fw}:{fh}:{fx}:{fy},scale={W}:{top_h}:force_original_aspect_ratio=increase,"
-                f"crop={W}:{top_h}[cam];"
-                f"[b]crop={gw}:{h}:{(w - gw) // 2}:0,scale={W}:{bot_h}[game];"
-                f"[cam][game]vstack=inputs=2,setsar=1[base]")
+        parts = (f"[0:v]fps={fps},split=2[a][b];"
+                 f"[a]crop={fw}:{fh}:{fx}:{fy},scale={W}:{top_h}:force_original_aspect_ratio=increase,"
+                 f"crop={W}:{top_h}[cam];"
+                 f"[b]crop={gw}:{h}:{(w - gw) // 2}:0,scale={W}:{bot_h}[game];")
+        if not band:
+            return parts + "[cam][game]vstack=inputs=2,setsar=1[base]"
+        # faixa escura com filete magenta (cores da marca) entre a câmera e o jogo
+        return (parts + f"color=c=0x0D0B1A:s={W}x{BAND_H}:r={fps},"
+                f"drawbox=x=0:y={BAND_H - 6}:w={W}:h=6:color=0xFF2D87:t=fill[band];"
+                f"[cam][band][game]vstack=inputs=3:shortest=1,setsar=1[base]")
     if layout == "crop":
         cw = min(w, _even(h * W / H))
         return f"[0:v]fps={fps},crop={cw}:{h}:{(w - cw) // 2}:0,scale={W}:{H},setsar=1[base]"
@@ -182,7 +197,8 @@ def render(src: str, out: str, start: float, end: float, words: list[Word], rc: 
     if layout in ("facecam", "pip") and not facecam:
         layout = "blur"
     W, H = rc["width"], rc["height"]
-    vf = video_filter(layout, info["w"], info["h"], W, H, rc["fps"], facecam, rc.get("pip_zoom", 1.5))
+    vf = video_filter(layout, info["w"], info["h"], W, H, rc["fps"], facecam, rc.get("pip_zoom", 1.5),
+                      band=bool(hook))
     with tempfile.TemporaryDirectory() as tmp:
         ass = build_ass(words, start, end, rc, layout, credit, hook=hook, handle=handle, style=style)
         (Path(tmp) / "subs.ass").write_text(ass, encoding="utf-8")

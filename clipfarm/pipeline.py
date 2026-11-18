@@ -4,7 +4,10 @@ from __future__ import annotations
 import json
 import logging
 import math
+import os
 import random
+import shutil
+import subprocess
 import time
 from dataclasses import asdict
 from pathlib import Path
@@ -80,7 +83,8 @@ def harvest(ctx: Ctx) -> int:
             mid = ctx.db.add_moment(
                 source="twitch_clip", platform="twitch", channel=login,
                 vod_id=c.get("video_id") or None,
-                vod_offset_s=(off + c["duration"] / 2) if off is not None else None,
+                # na prática o vod_offset da Twitch marca o FIM do clip no VOD (conferido em frames), não o início
+                vod_offset_s=(off - c["duration"] / 2) if off is not None else None,
                 media_url=c["url"], duration_s=c["duration"],
                 score=round(3 * math.log10(c["view_count"] + 1), 2),
                 signals={"kind": "viewer_clip", "views": c["view_count"], "clip_title": c["title"],
@@ -180,7 +184,13 @@ def process_moment(ctx: Ctx, m, transcriber=None) -> int | None:
         expected = m["vod_offset_s"] - dl_start
         search = (expected - 15, expected + 8)
     else:
-        fetch_url(m["media_url"], raw)
+        if m["source"] == "twitch_clip" and m["vod_id"] and m["vod_offset_s"] is not None:
+            # o clip pronto da Twitch vem com legenda automática embutida; o mesmo trecho do VOD vem limpo
+            half = (m["duration_s"] or 30) / 2 + 2
+            # 15s a mais no fim: quem clipa para logo após o momento, e a reação do streamer vem em seguida
+            fetch_vod_section(m["vod_id"], max(0.0, m["vod_offset_s"] - half), m["vod_offset_s"] + half + 15, raw)
+        else:
+            fetch_url(m["media_url"], raw)
         dur0 = probe(str(raw))["duration"]
         expected, search = None, (dur0 * 0.3, dur0)
     duration = probe(str(raw))["duration"]
@@ -205,36 +215,62 @@ def process_moment(ctx: Ctx, m, transcriber=None) -> int | None:
         start, end = choose_window(duration, peak_t, segments, cc["pre_s"], cc["post_s"],
                                    cc["min_len_s"], cc["max_len_s"])
 
+    # 4b) só o trecho em que a facecam aparece o tempo todo (ela some em cutscene e volta com fade)
+    rules = C.channel_rules(cfg).get(m["channel"].lower(), {})
+    facecam, lo, hi = rules.get("facecam"), 0.0, duration
+    if cfg["llm"]["enabled"] and cfg["llm"].get("find_facecam", True):
+        run = facecam_run(str(raw), start, end, cfg["llm"]["model"])
+        if run is not None:  # None = não deu para saber: segue com a posição fixa do config
+            cam_start, cam_end, seen = run
+            if cam_end - cam_start >= cc["min_len_s"]:
+                start, end, lo, hi = cam_start, cam_end, cam_start, cam_end
+                # meio por cento para dentro: a borda da câmera aparecia como um filete no corte
+                facecam = {"x": seen["x"] + 0.005, "y": seen["y"] + 0.006,
+                           "w": seen["w"] - 0.010, "h": seen["h"] - 0.012}
+            elif cc.get("require_facecam", True):
+                ctx.db.set_moment(m["id"], "rejected",
+                                  f"facecam visível por só {cam_end - cam_start:.0f}s seguidos neste trecho")
+                raw.unlink(missing_ok=True)
+                return None
+            else:
+                facecam = None
+
     # 5) (opcional) Claude como editor
     kind = sig.get("kind", "reaction")
-    title, extra_tags, score = None, [], float(m["score"] or 0)
+    title, headline, extra_tags, score = None, None, [], float(m["score"] or 0)
     if cfg["llm"]["enabled"]:
         from .llm import review
 
         rv = review(m["channel"], kind, sig.get("sample", []), text_between(segments, start - 5, end + 5),
                     start, end, peak_t, cc["max_len_s"], cfg["llm"]["model"],
-                    "pt-BR" if cfg["market"]["whisper_language"] == "pt" else cfg["market"]["whisper_language"])
+                    "pt-BR" if cfg["market"]["whisper_language"] == "pt" else cfg["market"]["whisper_language"],
+                    frames=[frame_jpeg(str(raw), start + (end - start) * f) for f in (0.15, 0.4, 0.65, 0.9)])
         if rv:
-            if not rv.get("keep", True) or rv.get("score", 10) < cfg["llm"]["min_score"]:
+            # clip feito pela audiência já foi escolhido por quem assistiu: o Claude só dá título, não rejeita
+            if m["source"] == "chat_spike" and (
+                    not rv.get("keep", True) or rv.get("score", 10) < cfg["llm"]["min_score"]):
                 ctx.db.set_moment(m["id"], "rejected", f"llm: {rv.get('reason', '')}"[:500])
                 raw.unlink(missing_ok=True)
                 return None
-            start, end, title, score = rv["start"], min(rv["end"], duration), rv.get("title"), rv["score"]
+            title, score = rv.get("title"), rv["score"]
+            if min(rv["end"], hi) - max(rv["start"], lo) >= cc["min_len_s"]:  # o Claude não sai do trecho com câmera
+                start, end = max(rv["start"], lo), min(rv["end"], hi)
+            headline = (rv.get("headline") or "")[:60] or None
             extra_tags = [t for t in rv.get("hashtags") or [] if isinstance(t, str) and t.startswith("#")][:3]
 
-    end = end_at_pause(words, end, duration)
+    end = end_at_pause(words, end, hi)
 
     # 6) render 9:16 com legenda + crédito
-    rules = C.channel_rules(cfg).get(m["channel"].lower(), {})
     credit = rules.get("credit") or f"twitch.tv/{m['channel']}"
     title = title or heuristic_title(m["channel"], kind, m["title_hint"])
     out = ctx.data / "clips" / f"{m['channel']}_{m['id']}.mp4"
     render(str(raw), str(out), start, end, words, cfg["render"], cfg["render"]["layout"],
-           rules.get("facecam"), credit, handle=cfg["render"].get("handle"), style=cfg["render"].get("style"))
+           facecam or None, credit, hook=headline, handle=cfg["render"].get("handle"), style=cfg["render"].get("style"))
 
     tags = " ".join(dict.fromkeys(pick_hashtags(cfg["publish"]) + [f"#{m['channel']}"] + extra_tags))
     desc = f"{title}\n\nCréditos: {credit}\n{tags} #shorts"
     out.with_suffix(".txt").write_text(desc, encoding="utf-8")  # legenda pronta para colar ao postar à mão
+    export_copies(cfg["publish"], out, m["channel"])
     auto = cfg["review"].get("auto_approve_score")
     status = "approved" if auto is not None and score >= auto else "review"
     cid = ctx.db.add_clip(moment_id=m["id"], path=str(out), start_s=start, end_s=end, title=title,
@@ -244,6 +280,63 @@ def process_moment(ctx: Ctx, m, transcriber=None) -> int | None:
     log.info("clip %s pronto (%s, %.0fs, pico %.1f@%.1fs): %s", cid, m["channel"], end - start, peak_val,
              peak_t, out.name)
     return cid
+
+
+def longest_cam_run(ts: list[float], looks: list[dict | None], start: float, end: float,
+                    tol: float = 0.04) -> tuple[float, float, dict] | None:
+    """Maior trecho contínuo com a facecam no mesmo lugar: (início, fim, posição). None se nada pôde ser visto."""
+    if all(x is None for x in looks):
+        return None
+    best, i = (start, start, {}), 0
+    while i < len(ts):
+        a = looks[i]
+        if not a:
+            i += 1
+            continue
+        same = lambda k: k < len(ts) and bool(looks[k]) and abs(a["x"] - looks[k]["x"]) < tol             and abs(a["y"] - looks[k]["y"]) < tol  # noqa: E731
+        j = i
+        while same(j + 1) or same(j + 2):  # uma amostra fora do padrão entre duas iguais é erro de leitura
+            j += 1 if same(j + 1) else 2
+        t0 = start if i == 0 else ts[i] + 1.0        # 1s depois: a câmera ainda pode estar entrando em fade
+        t1 = end if j == len(ts) - 1 else ts[j]      # para na última amostra em que ela ainda estava lá
+        if t1 - t0 > best[1] - best[0]:
+            best = (t0, t1, a)
+        i = j + 1
+    return best
+
+
+def facecam_run(path: str, start: float, end: float, model: str, step: float = 3.0):
+    """Olha um frame a cada `step` segundos e devolve o maior trecho com a câmera visível (ver longest_cam_run)."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from .llm import find_facecam
+
+    ts = [start + step / 2 + i * step for i in range(max(1, int((end - start) // step)))]
+    with ThreadPoolExecutor(4) as ex:
+        looks = list(ex.map(lambda t: find_facecam(frame_jpeg(path, t), model), ts))
+    return longest_cam_run(ts, looks, start, end)
+
+
+def frame_jpeg(path: str, at: float) -> bytes:
+    """Um frame do vídeo em JPEG (720p), para o Claude localizar a facecam."""
+    return subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{at:.2f}", "-i", path, "-frames:v", "1",
+                           "-vf", "scale=1280:-2", "-f", "image2pipe", "-c:v", "mjpeg", "-"],
+                          capture_output=True, check=True).stdout
+
+
+def export_copies(pc: dict, out: Path, channel: str):
+    """Copia o corte e a legenda para <export_dir>/<plataforma>/<canal>/, uma pasta por rede, para postar à mão."""
+    if not pc.get("export_dir"):
+        return
+    for plat in pc.get("export_platforms", ("tiktok", "instagram", "youtube")):
+        dest = Path(pc["export_dir"]).expanduser() / plat / channel
+        dest.mkdir(parents=True, exist_ok=True)
+        for f in (out, out.with_suffix(".txt")):
+            (dest / f.name).unlink(missing_ok=True)
+            try:
+                os.link(f, dest / f.name)  # mesmo arquivo em 3 pastas sem ocupar 3x o disco
+            except OSError:  # outro disco ou sistema sem hardlink
+                shutil.copy2(f, dest / f.name)
 
 
 def pick_hashtags(pc: dict) -> list[str]:

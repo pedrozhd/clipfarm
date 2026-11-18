@@ -133,6 +133,19 @@ def test_chat_spike_needs_emotion():
     assert burst(0.0) and not burst(0.25)
 
 
+def test_clip_keeps_only_stretch_with_facecam():
+    from clipfarm.pipeline import longest_cam_run as r
+
+    a, far = {"x": .78, "y": .25, "w": .2, "h": .2}, {"x": .1, "y": .1, "w": .2, "h": .2}
+    ts = [1.5, 4.5, 7.5, 10.5, 13.5, 16.5]
+    assert r(ts, [a] * 6, 0, 18) == (0, 18, a)                    # câmera o tempo todo: corte inteiro
+    assert r(ts, [{}, {}, {}, a, a, a], 0, 18) == (11.5, 18, a)   # volta com fade: começa 1s depois de vê-la
+    assert r(ts, [a, a, a, {}, {}, {}], 0, 18) == (0, 7.5, a)     # some no meio: para onde ainda estava
+    assert r(ts, [a, a, far, far, far, far], 0, 18)[2] == far     # mudou de lugar: fica o trecho maior
+    assert r(ts, [{}] * 6, 0, 18) == (0, 0, {}) and r(ts, [None] * 6, 0, 18) is None
+    assert r(ts, [a, a, far, a, a, a], 0, 18) == (0, 18, a)       # uma leitura errada isolada não quebra o trecho
+
+
 def test_end_extends_to_speech_pause():
     from clipfarm.scoring import end_at_pause
 
